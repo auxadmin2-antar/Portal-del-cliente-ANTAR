@@ -1,11 +1,30 @@
 # Publicar en GitHub y Vercel
 
-## 1. Subir a GitHub con GitHub Desktop
+Esta carpeta ya es un repositorio Git con un remoto de GitHub configurado. Antes
+de enviar cambios, comprobar el estado:
 
-1. File > Add local repository > elegir esta carpeta. Si dice que no es un repositorio, pulsar "create a repository".
-2. Comprobar que en la lista de cambios NO aparecen `.env.local`, `node_modules` ni `.next`.
-   Solo debe aparecer `.env.example` (sin valores).
-3. Commit inicial y "Publish repository". Marcarlo como **Private**.
+```powershell
+git status --short --branch
+```
+
+No deben aparecer `.env.local`, `node_modules`, `.next`, `salidas-prueba` ni
+archivos de credenciales. `.env.example` sí forma parte del repositorio y no
+incluye valores secretos.
+
+## 1. Enviar el repositorio a GitHub
+
+Desde esta carpeta, iniciar sesión en GitHub si hiciera falta y ejecutar:
+
+```powershell
+git push origin main
+```
+
+También se puede abrir la carpeta con GitHub Desktop y pulsar **Push origin**.
+No usar **Publish repository**: el remoto ya existe. En GitHub, comprobar que
+el flujo **Website checks** finalice correctamente antes de seguir con Vercel.
+
+Mantener el repositorio como **Private**, ya que el portal trata expedientes de
+clientes aunque los secretos no se almacenen en Git.
 
 ## 2. Antes de importar en Vercel
 
@@ -21,7 +40,8 @@ no un error del proyecto.
 ## 3. Importar en Vercel
 
 1. Add New > Project > importar el repositorio. Framework: Next.js (se detecta solo).
-2. Settings > General > Node.js Version: **22.x**.
+2. Mantener la raíz del proyecto en esta carpeta y confirmar Node.js **22.x**.
+   El repositorio fija la versión 22.23.2 para desarrollo y CI.
 3. Variables de entorno (Settings > Environment Variables):
 
 | Variable | Valor |
@@ -36,13 +56,18 @@ no un error del proyecto.
 | KYC_TRUST_PROXY | true |
 | KYC_MAX_TOTAL_MB / KYC_MAX_FILE_MB | 4 |
 
-   Para **Preview** usar tu propio correo en KYC_MAIL_TO y las claves de prueba de Turnstile
-   (en .env.example), nunca los destinatarios reales.
-4. Deploy. Cambiar una variable exige un nuevo deploy.
+   Configurar primero **Production**. Para **Preview** usar tu propio correo en
+   `KYC_MAIL_TO` y las claves de prueba de Turnstile (en `.env.example`), nunca
+   los destinatarios reales. No copiar secretos de Production a Preview.
+4. Deploy. Cambiar una variable exige un nuevo deploy. Si se añade un dominio
+   personalizado después del primer despliegue, actualizar `SITE_URL` y volver
+   a desplegar.
 
 ## 4. Después de publicar
 
 - Enviar un expediente de prueba con datos ficticios y confirmar que llegan los dos PDF.
 - Vercel > Firewall: crear regla de límite de peticiones para `POST /api/kyc`.
 - Settings > Deployment Protection: activar para las Preview.
-- Sustituir el borrador del aviso de privacidad (src/content/privacy.ts) por el texto aprobado.
+- Sustituir el borrador del aviso de privacidad (`src/content/privacy.ts`) por el texto aprobado.
+- Conservar `SITE_INDEXABLE=false` hasta tener contenido, dominio y revisión de
+  lanzamiento aprobados.
