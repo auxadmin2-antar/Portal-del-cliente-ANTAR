@@ -1,10 +1,18 @@
 "use client";
 import { CheckboxField, ChoiceField, Field, TextareaField } from "@/components/ui/field";
-import { LIMITS, type FieldDef, type KycValue, type TableRow } from "../fields.ts";
+import Link from "next/link";
+import { LIMITS, labelParts, type FieldDef, type KycValue, type TableRow } from "../fields.ts";
 import { TableInput } from "./table-input";
 
 const YES_NO = [{ value: "si", label: "Sí" }, { value: "no", label: "No" }];
 const INPUT_TYPES: Partial<Record<FieldDef["type"], string>> = { date: "date", email: "email", tel: "tel" };
+
+/** Etiqueta con enlaces internos navegables; el formulario se conserva al volver. */
+function RichLabel({ label }: { label: string }) {
+  return <>{labelParts(label).map((part, index) => part.href
+    ? <Link key={index} href={part.href}>{part.text}</Link>
+    : <span key={index}>{part.text}</span>)}</>;
+}
 
 /** Id del elemento que recibe el foco desde el resumen de errores. */
 export function focusTarget(field: FieldDef) {
@@ -32,7 +40,7 @@ export function FieldInput({ field, value, error, onChange }: Props) {
         options={field.type === "yesnona" ? [...YES_NO, { value: "na", label: field.naLabel ?? "No aplica" }] : YES_NO}
         onChange={next => onChange(field.id, next)} />;
     case "check":
-      return <CheckboxField id={id} label={field.label} hint={field.hint} error={error} className={className} checked={text === "on"} onChange={checked => onChange(field.id, checked ? "on" : "")} />;
+      return <CheckboxField id={id} label={<RichLabel label={field.label} />} hint={field.hint} error={error} className={className} checked={text === "on"} onChange={checked => onChange(field.id, checked ? "on" : "")} />;
     default:
       return <Field id={id} label={field.label} hint={field.hint} error={error} optional={optional} className={className}
         type={INPUT_TYPES[field.type] ?? "text"}

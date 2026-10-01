@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
 import { PDFDocument, PDFName, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
-import { DOCUMENTS, SECTIONS, SIGNATURE, flaggedFields, isVisible, type Column, type FieldDef, type KycValues, type TableRow } from "./fields.ts";
+import { DOCUMENTS, SECTIONS, SIGNATURE, flaggedFields, isVisible, plainLabel, type Column, type FieldDef, type KycValues, type TableRow } from "./fields.ts";
 import { detectFileType } from "./files.ts";
+import { privacyNotice } from "../../content/privacy.ts";
+import { confidentialityAgreement } from "../../content/confidentiality.ts";
 
 const A4: [number, number] = [595.28, 841.89];
 const MARGIN = 48;
@@ -222,8 +224,9 @@ export async function buildFormPdf(values: KycValues, meta: Meta, attachments: A
   }
 
   writer.section(`${SECTIONS.length + 2}. Declaración y aceptación`);
-  for (const field of SIGNATURE) writer.field(field.label, formatValue(text(field.id), field.type));
+  for (const field of SIGNATURE) writer.field(plainLabel(field.label), formatValue(text(field.id), field.type));
   writer.field("Fecha de aceptación", formatDateTime(meta.receivedAt));
+  writer.field("Versiones aceptadas", `Aviso de privacidad ${privacyNotice.version} · Acuerdo de confidencialidad ${confidentialityAgreement.version}`);
   writer.y -= 6;
   writer.text("Aceptación electrónica realizada en el portal de alta de clientes. No sustituye la firma autógrafa cuando el proceso interno la requiera.", { size: 8, color: MUTED });
 

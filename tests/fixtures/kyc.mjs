@@ -77,6 +77,8 @@ export function validKyc() {
     firm_cargo: "Administrador único",
     ack_veraz: "on",
     ack_privacidad: "on",
+    ack_terceros: "on",
+    ack_confidencialidad: "on",
   };
 }
 

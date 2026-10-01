@@ -1,8 +1,8 @@
 "use client";
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Notice } from "@/components/ui/notice";
-import { ALL_FIELDS, DOCUMENTS, SECTIONS, SIGNATURE, emptyValues, isVisible, type KycValue, type KycValues, type TableRow } from "../fields.ts";
+import { ALL_FIELDS, DOCUMENTS, SECTIONS, SIGNATURE, emptyValues, isVisible, plainLabel, type KycValue, type KycValues, type TableRow } from "../fields.ts";
 import { validateKyc } from "../validation.ts";
 import { allowedExtension, detectFileType } from "../files.ts";
 import { FieldInput, focusTarget } from "./field-input";
@@ -11,6 +11,7 @@ import { DocumentsStep } from "./documents-step";
 import { ReviewStep } from "./review-step";
 import { Turnstile } from "./turnstile";
 import { formatBytes, shrinkImage } from "./image";
+import { clearForm, restoreForm, saveForm } from "./form-memory";
 
 export type KycFormSettings = { siteKey: string | null; maxFileBytes: number; maxTotalBytes: number };
 type Props = { settings: KycFormSettings; nonce?: string; draftNote: string };
@@ -22,10 +23,9 @@ const REVIEW_STEP = SECTIONS.length + 1;
 const STEPS = [...SECTIONS.map(section => ({ title: section.title, description: section.description })),
   { title: "Documentos", description: "Adjunte cada documento en PDF, JPG o PNG. Las fotografías grandes se reducen automáticamente." },
   { title: "Revisión y envío", description: "Revise su información. Puede volver a cualquier sección con «Editar»." }];
-const DRAFT_KEY = "kyc-draft-v1";
 const IMAGE_SHRINK_FROM = 700 * 1024;
 const LABELS: Record<string, string> = {
-  ...Object.fromEntries(ALL_FIELDS.map(field => [field.id, field.label])),
+  ...Object.fromEntries(ALL_FIELDS.map(field => [field.id, plainLabel(field.label)])),
   ...Object.fromEntries(DOCUMENTS.map(document => [document.id, document.label])),
   captcha: "Verificación de seguridad",
 };
@@ -34,29 +34,6 @@ function initialValues(): KycValues {
   const values = emptyValues();
   for (const field of ALL_FIELDS) if (field.type === "table" && field.required) values[field.id] = [emptyRow(field)];
   return values;
-}
-
-// El borrador se lee una sola vez por carga de página, fuera del render de servidor.
-let draftAtLoad: string | null | undefined;
-function readDraft() {
-  if (draftAtLoad === undefined) {
-    try { draftAtLoad = window.sessionStorage.getItem(DRAFT_KEY); } catch { draftAtLoad = null; }
-  }
-  return draftAtLoad;
-}
-const noSubscription = () => () => undefined;
-
-function parseDraft(raw: string): { values: KycValues; step: number } | null {
-  try {
-    const parsed = JSON.parse(raw) as { values?: Record<string, unknown>; step?: unknown };
-    const values = initialValues();
-    for (const field of ALL_FIELDS) {
-      const value = parsed.values?.[field.id];
-      if (field.type === "table" ? Array.isArray(value) : typeof value === "string") values[field.id] = value as KycValue;
-    }
-    const step = typeof parsed.step === "number" && parsed.step >= 0 && parsed.step <= DOCUMENTS_STEP ? parsed.step : 0;
-    return { values, step };
-  } catch { return null; }
 }
 
 function pick(errors: Errors, ids: string[]) {
@@ -76,10 +53,12 @@ function serverMessage(code: string, maxTotalBytes: number) {
 }
 
 export function KycForm({ settings, nonce, draftNote }: Props) {
-  const [values, setValues] = useState<KycValues>(initialValues);
-  const [files, setFiles] = useState<Files>({});
-  const [step, setStep] = useState(0);
-  const [visited, setVisited] = useState(0);
+  // Se ejecuta solo en el navegador: restaura lo capturado en esta pestaña.
+  const [restored] = useState(() => restoreForm(DOCUMENTS_STEP, initialValues()));
+  const [values, setValues] = useState<KycValues>(() => restored?.values ?? initialValues());
+  const [files, setFiles] = useState<Files>(() => restored?.files ?? {});
+  const [step, setStep] = useState(() => restored?.step ?? 0);
+  const [visited, setVisited] = useState(() => restored?.visited ?? 0);
   const [errors, setErrors] = useState<Errors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [processing, setProcessing] = useState<string | null>(null);
@@ -87,11 +66,8 @@ export function KycForm({ settings, nonce, draftNote }: Props) {
   const [folio, setFolio] = useState<string | null>(null);
   const [captchaToken, setCaptchaToken] = useState("");
   const [captchaKey, setCaptchaKey] = useState(0);
-  const [touched, setTouched] = useState(false);
-  const [draftHandled, setDraftHandled] = useState(false);
   const [focusRequest, setFocusRequest] = useState<{ target: "heading" | "summary" | "result"; id: number } | null>(null);
 
-  const draft = useSyncExternalStore(noSubscription, readDraft, () => null);
   const startedAt = useRef(0);
   const honeypot = useRef<HTMLInputElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -101,10 +77,11 @@ export function KycForm({ settings, nonce, draftNote }: Props) {
 
   useEffect(() => { startedAt.current = Date.now(); }, []);
 
+  // Guarda en cada cambio; los archivos solo en memoria (ver form-memory.ts).
   useEffect(() => {
-    if (!touched || folio) return;
-    try { window.sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ values, step: Math.min(step, DOCUMENTS_STEP) })); } catch { /* Almacenamiento no disponible. */ }
-  }, [values, step, touched, folio]);
+    if (folio) return;
+    saveForm({ values, files, step, visited }, DOCUMENTS_STEP);
+  }, [values, files, step, visited, folio]);
 
   useEffect(() => {
     if (!focusRequest) return;
@@ -123,8 +100,6 @@ export function KycForm({ settings, nonce, draftNote }: Props) {
       delete next[id];
       return next;
     });
-    setTouched(true);
-    setDraftHandled(true);
   }, []);
 
   function errorsFor(target: number): Errors {
@@ -176,18 +151,10 @@ export function KycForm({ settings, nonce, draftNote }: Props) {
     setFiles(previous => ({ ...previous, [id]: file }));
   }
 
-  function restoreDraft() {
-    const parsed = draft ? parseDraft(draft) : null;
-    setDraftHandled(true);
-    if (!parsed) return;
-    setValues(parsed.values);
-    setVisited(parsed.step);
-    goTo(parsed.step);
-  }
-
-  function discardDraft() {
-    try { window.sessionStorage.removeItem(DRAFT_KEY); } catch { /* Almacenamiento no disponible. */ }
-    setDraftHandled(true);
+  function startOver() {
+    if (!window.confirm("¿Borrar toda la información capturada y los archivos adjuntos?")) return;
+    clearForm();
+    reset();
   }
 
   async function submit() {
@@ -210,7 +177,7 @@ export function KycForm({ settings, nonce, draftNote }: Props) {
       const response = await fetch("/api/kyc", { method: "POST", body, signal: AbortSignal.timeout(90_000) });
       const data = await response.json().catch(() => null) as { ok?: boolean; folio?: string; error?: string; fields?: Errors } | null;
       if (response.ok && data?.ok && data.folio) {
-        try { window.sessionStorage.removeItem(DRAFT_KEY); } catch { /* Almacenamiento no disponible. */ }
+        clearForm();
         setFolio(data.folio);
         requestFocus("result");
         return;
@@ -248,7 +215,6 @@ export function KycForm({ settings, nonce, draftNote }: Props) {
     setFolio(null);
     setCaptchaToken("");
     setCaptchaKey(key => key + 1);
-    setTouched(false);
     startedAt.current = Date.now();
     requestFocus("heading");
   }
@@ -272,18 +238,12 @@ export function KycForm({ settings, nonce, draftNote }: Props) {
       <h2>Secciones</h2>
       <ol>
         {STEPS.map((item, index) => <li key={item.title}>
-          <button type="button" disabled={index > visited || sending} aria-current={index === step ? "step" : undefined} onClick={() => goTo(index)}>{item.title}</button>
+          <button type="button" disabled={index > visited || sending} aria-current={index === step ? "step" : undefined} data-done={index < visited && index !== step ? true : undefined} onClick={() => goTo(index)}>{item.title}{index < visited && index !== step && <span className="visually-hidden"> (visitado)</span>}</button>
         </li>)}
       </ol>
     </nav>
 
     <div className="kyc-panel" ref={panel}>
-      {draft && !draftHandled && <Notice>
-        <div className="kyc-draft">
-          <p>Hay información capturada anteriormente en esta pestaña.</p>
-          <div><Button variant="secondary" onClick={restoreDraft}>Recuperar</Button><Button variant="link" onClick={discardDraft}>Descartar</Button></div>
-        </div>
-      </Notice>}
 
       <div className="kyc-progress">
         <span>Paso {step + 1} de {STEPS.length}</span>
@@ -337,7 +297,7 @@ export function KycForm({ settings, nonce, draftNote }: Props) {
             ? <Button type="submit" disabled={Boolean(processing)}>Continuar</Button>
             : <Button type="submit" disabled={sending || Boolean(processing)}>{sending ? "Enviando…" : "Enviar expediente"}</Button>}
         </div>
-        {step === 0 && <p className="kyc-note">{draftNote}</p>}
+        <p className="kyc-note">{draftNote} <Button variant="link" onClick={startOver} disabled={sending}>Borrar la información capturada</Button></p>
         {sending && <p className="kyc-note" role="status">Enviando su información y documentos. No cierre esta ventana.</p>}
       </form>
     </div>

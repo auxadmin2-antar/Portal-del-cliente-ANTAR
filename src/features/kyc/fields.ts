@@ -201,10 +201,32 @@ export const SIGNATURE: FieldDef[] = [
   { id: "firm_nombre", label: "Nombre completo de quien envía", type: "text", required: true, autoComplete: "name" },
   { id: "firm_cargo", label: "Cargo", type: "text", required: true, autoComplete: "organization-title" },
   { id: "ack_veraz", label: "Declaro bajo protesta de decir verdad que la información y los documentos proporcionados son veraces y exactos a la fecha de envío.", type: "check", required: true },
-  { id: "ack_privacidad", label: "He leído y acepto el aviso de privacidad.", type: "check", required: true },
+  { id: "ack_privacidad", label: "He leído el [aviso de privacidad](/aviso-de-privacidad) y otorgo mi consentimiento expreso para el tratamiento de los datos personales, incluidos los patrimoniales y financieros, para las finalidades que en él se describen.", type: "check", required: true },
+  { id: "ack_terceros", label: "Declaro que informé a las personas cuyos datos proporciono (representantes, directivos, accionistas, beneficiarios y contactos) sobre el [aviso de privacidad](/aviso-de-privacidad) y que cuento con facultades para compartir su información.", type: "check", required: true },
+  { id: "ack_confidencialidad", label: "He leído y acepto el [acuerdo de confidencialidad](/acuerdo-de-confidencialidad), por el cual la empresa se obliga a mantener en reserva la información y los documentos que envío.", type: "check", required: true },
 ];
 
 export const ALL_FIELDS: FieldDef[] = [...SECTIONS.flatMap(section => section.fields), ...SIGNATURE];
+
+const LINK = /\[([^\]]+)\]\((\/[^)\s]*)\)/g;
+
+/** Etiqueta sin marcas de enlace, para PDF, correo y mensajes. */
+export function plainLabel(label: string) {
+  return label.replace(LINK, "$1");
+}
+
+/** Divide una etiqueta en texto y enlaces internos: "[texto](/ruta)". */
+export function labelParts(label: string): Array<{ text: string; href?: string }> {
+  const parts: Array<{ text: string; href?: string }> = [];
+  let last = 0;
+  for (const match of label.matchAll(LINK)) {
+    if (match.index > last) parts.push({ text: label.slice(last, match.index) });
+    parts.push({ text: match[1]!, href: match[2]! });
+    last = match.index + match[0].length;
+  }
+  if (last < label.length) parts.push({ text: label.slice(last) });
+  return parts;
+}
 
 export function isVisible(field: FieldDef, values: KycValues) {
   return !field.showIf || values[field.showIf.field] === field.showIf.equals;

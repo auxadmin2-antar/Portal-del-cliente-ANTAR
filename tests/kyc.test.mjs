@@ -8,6 +8,8 @@ import { buildAttachmentsPdf, buildFormPdf, AttachmentError } from '../src/featu
 import { isRateLimited, isSameOrigin, clientKey, verifyCaptcha } from '../src/features/kyc/security.ts';
 import { readKycConfig } from '../src/config/kyc.schema.ts';
 import { validKyc, tinyPng } from './fixtures/kyc.mjs';
+import { privacyNotice } from '../src/content/privacy.ts';
+import { confidentialityAgreement } from '../src/content/confidentiality.ts';
 
 async function samplePdf(pages = 1, { annotate = false } = {}) {
   const doc = await PDFDocument.create();
@@ -31,6 +33,21 @@ test('required, format and conditional rules are enforced on the server', () => 
   const input = { ...validKyc(), razon_social: '  ', rfc: 'ABC', dom_cp: '123', contacto_email: 'no-es-correo', hay_modif: 'si', ack_veraz: '' };
   const { errors } = validateKyc(input);
   for (const id of ['razon_social', 'rfc', 'dom_cp', 'contacto_email', 'mod_desc', 'mod_numero', 'ack_veraz']) assert.ok(errors[id], `missing error for ${id}`);
+});
+
+test('privacy consent, third-party notice and confidentiality agreement are mandatory', () => {
+  const { errors } = validateKyc({ ...validKyc(), ack_privacidad: '', ack_terceros: 'yes', ack_confidencialidad: undefined });
+  assert.deepEqual(Object.keys(errors).sort(), ['ack_confidencialidad', 'ack_privacidad', 'ack_terceros']);
+});
+
+test('legal documents are versioned and have no empty sections', () => {
+  for (const document of [privacyNotice, confidentialityAgreement]) {
+    assert.match(document.version, /^\d{4}-\d{2}-\d{2}$/);
+    assert.ok(document.sections.length >= 15, `${document.title} should be detailed`);
+    const ids = document.sections.map(section => section.id);
+    assert.equal(new Set(ids).size, ids.length, 'section anchors must be unique');
+    for (const section of document.sections) assert.ok(section.blocks.length > 0, section.id);
+  }
 });
 
 test('hidden conditional answers are discarded and unknown keys ignored', () => {

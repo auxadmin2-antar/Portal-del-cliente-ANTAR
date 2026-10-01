@@ -44,7 +44,7 @@ async function start(required) {
     const ended = once(child, 'exit'); child.kill(); await ended;
   }
   try {
-    for (let i = 0; i < 60; i++) {
+    for (let i = 0; i < 300; i++) { // hasta ~45 s en equipos lentos
       if (child.exitCode !== null) throw new Error('Server exited: ' + output);
       try { if ((await fetch(base + '/api/health/live', { signal: AbortSignal.timeout(1000) })).ok) return { base, stop }; } catch { /* Startup polling. */ }
       await delay(150);
@@ -90,6 +90,15 @@ try {
   assert.ok(scripts.length > 0 && scripts.every(tag => tag.includes(`nonce="${nonce}"`)), 'Every script must carry the request nonce');
   assert.notEqual((await fetch(app.base)).headers.get('content-security-policy'), csp, 'Nonce must change per request');
   assert.equal((await fetch(app.base + '/aviso-de-privacidad')).status, 200);
+  const registro = await fetch(app.base + '/registro');
+  assert.equal(registro.status, 200);
+  const registroHtml = await registro.text();
+  assert.equal((registroHtml.match(/<h1[ >]/g) || []).length, 1);
+  assert.match(registroHtml, /rel="canonical" href="[^"]*\/registro"/);
+  assert.match(html, /href="\/registro"/, 'Home must link to the form');
+  const agreement = await fetch(app.base + '/acuerdo-de-confidencialidad');
+  assert.equal(agreement.status, 200);
+  assert.match(await agreement.text(), /Acuerdo de confidencialidad/);
 
   if (env.VERCEL_ENV !== 'production') {
     const endpoint = app.base + '/api/kyc';
