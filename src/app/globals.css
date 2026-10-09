@@ -166,13 +166,16 @@ fieldset.field { border: 0; padding: 0; margin: 0; min-width: 0; }
 .kyc-actions .button:only-child { margin-left: auto; }
 .kyc-note { font-size: .84rem; color: var(--color-muted); margin: var(--space-2) 0 0; }
 
-/* Tablas editables */
-.rows { display: grid; gap: var(--space-2); }
-.row-card { border: 1px solid var(--color-line); border-radius: var(--radius); padding: var(--space-2); background: var(--color-surface); margin: 0; min-width: 0; }
-.row-card legend { font-weight: 600; font-size: .82rem; color: var(--color-muted); padding: 0 .3rem; }
+/* Tablas editables: título fuera, todo lo demás dentro del cuadro gris */
+.table-box { display: grid; gap: var(--space-2); padding: var(--space-2) var(--space-3) var(--space-3); background: var(--color-surface); border: 1px solid var(--color-line); border-radius: var(--radius); }
+.table-box[data-invalid="true"] { border-color: var(--color-error); }
+.row-block { display: grid; gap: .75rem; padding-bottom: var(--space-2); border-bottom: 1px solid var(--color-line); }
+.row-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-2); }
+.row-title { margin: 0; font-size: .82rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--color-muted); }
+.row-head .button--link { font-size: .85rem; }
 .row-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: var(--space-2); }
-.row-grid .field label { font-size: .84rem; }
-.row-actions { display: flex; justify-content: flex-end; margin-top: .5rem; }
+.row-grid .field label { font-size: .86rem; }
+.table-actions { display: flex; }
 .rows-empty { margin: 0; color: var(--color-muted); font-size: .9rem; }
 
 /* Documentos */
